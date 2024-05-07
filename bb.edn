@@ -1,0 +1,2 @@
+{:deps     {com.github.ivarref/docker-update-tag {:local/root "."}}
+ :bbin/bin {docker-update-tag {:main-opts ["-m" "com.github.ivarref.docker-update-tag/-main"]}}}

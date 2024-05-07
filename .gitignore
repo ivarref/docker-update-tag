@@ -1,0 +1,4 @@
+.idea/
+.cpcache/
+.clj-kondo/.cache/
+Dockerfile
