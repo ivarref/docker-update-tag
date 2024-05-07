@@ -168,13 +168,16 @@ Allowed OPTS:
 (comment
   (fetch-from-other-repo "mcr.microsoft.com/azure-cli"))
 
+(defn fetch-tags-uri [image]
+  (str "https://hub.docker.com/v2/namespaces/"
+       (uri-encode (name-of-user-or-org image))
+       "/repositories/"
+       (image-part image)
+       "/tags?page_size=100"))
+
 (defn fetch-tags [image]
   ;(println "Fetching tags for image" image)
-  (let [uri (str "https://hub.docker.com/v2/namespaces/"
-                 (uri-encode (name-of-user-or-org image))
-                 "/repositories/"
-                 (image-part image)
-                 "/tags?page_size=100")]
+  (let [uri (fetch-tags-uri image)]
     (try
       (let [{:keys [status body]} (http/get uri {:headers {"Accept" "application/json"}})]
         (when-not (= 200 status)
@@ -195,6 +198,9 @@ Allowed OPTS:
           (binding [*out* *err*]
             (println "Error during HTTP get for uri" (pr-str uri) "with error message:" (ex-message e))
             (System/exit 1)))))))
+
+(comment
+  (fetch-tags-uri "docker.io/ivarref/mikkmokk-proxy")) ; docker.io is gone. TODO?
 
 (defn add-zeros [longs cnt]
   (if (= cnt (count longs))
@@ -327,6 +333,7 @@ Usage: docker-update-tag [COMMAND] [OPTION...]
 Available commands:
 
   docker-update-tag                ; Add or update an image tag
+  docker-update-tag update IMAGE   ; Add or update IMAGE, e.g. `eclipse-temurin`
   docker-update-tag help           ; Print subcommands
   docker-update-tag scan           ; Scan a folder for Dockerfiles
   docker-update-tag list           ; List available tags for an image
@@ -357,4 +364,6 @@ Available commands:
 
 (defn -main [& args]
   (ensure-env-ok)
-  (cli/dispatch dispatch-table args))
+  (if (= ["--help"] (vec args))
+    (print-subcommands {})
+    (cli/dispatch dispatch-table args)))
