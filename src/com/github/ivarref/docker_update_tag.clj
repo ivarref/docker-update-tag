@@ -57,6 +57,28 @@
 (defn ^:private blacklist-file-path []
   (str (share-path) "/blacklist.edn"))
 
+(defn ^:private filter-file-path []
+  (str (share-path) "/filter.edn"))
+
+(defn ^:private update-filter! [image args]
+  (let [m (safely-slurp-edn (filter-file-path) {})
+        m (if (map? m) m {})
+        m (into (sorted-map) m)]
+    (ensure-share-path!)
+    (spit (filter-file-path)
+          (with-out-str
+            (pprint (if (nil? args)
+                      (dissoc m image)
+                      (assoc m image args)))))))
+
+(defn vector->filter-fn [vals]
+  (fn [tag] (every? (fn [v] (str/includes? tag v)) vals)))
+
+(defn image->filter-fn [image]
+  (if-let [filter-values (get (safely-slurp-edn (filter-file-path) {}) image)]
+    (vector->filter-fn filter-values)
+    (fn [_tag] true)))
+
 (defn ^:private update-index! [k f & args]
   (let [m (safely-slurp-edn (index-file-path) {})
         m (if (map? m) m {})
@@ -200,7 +222,7 @@ Allowed OPTS:
             (System/exit 1)))))))
 
 (comment
-  (fetch-tags-uri "docker.io/ivarref/mikkmokk-proxy")) ; docker.io is gone. TODO?
+  (fetch-tags-uri "docker.io/ivarref/mikkmokk-proxy"))      ; docker.io is gone. TODO?
 
 (defn add-zeros [longs cnt]
   (if (= cnt (count longs))
@@ -244,7 +266,10 @@ Allowed OPTS:
 (defn list-tags [{:keys [opts]}]
   (let [image (or (:image opts)
                   (select-image-name))]
-    (doseq [tag (sort-tags (fetch-tags image))]
+    (doseq [tag (->> (fetch-tags image)
+                     (sort-tags)
+                     (filter (image->filter-fn image))
+                     (vec))]
       (println (str image ":" tag)))))
 
 (defn update-dockerfile-line [line image tag]
@@ -307,7 +332,10 @@ Allowed OPTS:
 (defn select-tag [image opts]
   (if-let [tag (:tag opts)]
     tag
-    (let [tags (sort-tags (fetch-tags image))
+    (let [tags (->> (fetch-tags image)
+                    (sort-tags)
+                    (filter (image->filter-fn image))
+                    (vec))
           fzf-result (shell {:out      :string
                              :continue true
                              :in       (str/join "\n" (into [":quit"] (reverse tags)))}
@@ -338,18 +366,35 @@ Available commands:
   docker-update-tag scan           ; Scan a folder for Dockerfiles
   docker-update-tag list           ; List available tags for an image
 
+  docker-update-tag filter IMAGE CONTAINS-PATTERN-1 CONTAINS-PATTERN-2
+                                   ; Add a permanent filter for IMAGE, e.g.
+                                   ; `docker-update-tag filter eclipse-temurin jammy`
+                                   ; or
+                                   ; `docker-update-tag filter clojure tools-deps jammy`
+                                   ; zero patterns removes the filter
+  docker-update-tag list-filter    ; list all filters
 ")))
+
+(defn add-filter [{:keys [args] {:keys [image]} :opts}]
+  (update-filter! image args)
+  (println image args))
+
+(defn list-filters [_]
+  (pprint (safely-slurp-edn (filter-file-path) {})))
+
+(comment
+  ((vector->filter-fn ["jdk" "jammy"]) "janei-jdk-jammy"))
 
 (def dispatch-table
   [
    ;{:cmds ["clear-index"]    :fn quickadd-clear-index}
    ;{:cmds ["index-path"]     :fn quickadd-index-path}
    {:cmds ["help"] :fn print-subcommands}
-   ;{:cmds ["libs"]           :fn quickadd-libs     }
    {:cmds ["scan"] :fn scan-and-update-index! :args->opts [:path]}
    {:cmds ["update"] :fn update-tag :args->opts [:image :tag]}
    {:cmds ["list"] :fn list-tags :args->opts [:image]}
-   ;{:cmds ["blacklist"]      :fn quickadd-blacklist}
+   {:cmds ["filter"] :fn add-filter :args->opts [:image]}
+   {:cmds ["list-filter"] :fn list-filters :args->opts [:image]}
    ;{:cmds ["blacklist-lib"]  :fn quickadd-blacklist-lib :args->opts [:lib]}
    ;{:cmds ["blacklist-list"] :fn quickadd-blacklist-list}
    {:cmds [] :fn select-image-and-update}])
