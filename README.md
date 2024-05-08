@@ -2,6 +2,8 @@
 
 Add or update your Dockerfile tags _with style_.
 
+<img width="600" src="https://raw.githubusercontent.com/ivarref/docker-update-tag/main/demo/demo2.svg">
+
 ## Usage
 
 `docker-update-tag scan DIR` - Scan `DIR` for docker image names.
