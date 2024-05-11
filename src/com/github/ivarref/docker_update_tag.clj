@@ -60,6 +60,9 @@
 (defn ^:private filter-file-path []
   (str (share-path) "/filter.edn"))
 
+(defn ^:private min-digits-file-path []
+  (str (share-path) "/min-digits-filter.edn"))
+
 (defn ^:private update-filter! [image args]
   (let [m (safely-slurp-edn (filter-file-path) {})
         m (if (map? m) m {})
@@ -71,13 +74,38 @@
                       (dissoc m image)
                       (assoc m image args)))))))
 
+(defn ^:private update-min-digits-filter! [image min-digits]
+  (let [m (safely-slurp-edn (min-digits-file-path) {})
+        m (if (map? m) m {})
+        m (into (sorted-map) m)]
+    (ensure-share-path!)
+    (spit (min-digits-file-path)
+          (with-out-str
+            (pprint (if (nil? min-digits)
+                      (dissoc m image)
+                      (assoc m image min-digits)))))))
+
 (defn vector->filter-fn [vals]
   (fn [tag] (every? (fn [v] (str/includes? tag v)) vals)))
 
-(defn image->filter-fn [image]
-  (if-let [filter-values (get (safely-slurp-edn (filter-file-path) {}) image)]
-    (vector->filter-fn filter-values)
+(defn min-digits->filter-fn [min-digits]
+  (fn [tag] (>= (count (re-seq #"\d" tag)) min-digits)))
+
+(comment
+  ((min-digits->filter-fn 3) "ja12n3ei"))
+
+(defn min-digits-filter-fn [image]
+  (if-let [min-digits (get (safely-slurp-edn (min-digits-file-path) {}) image)]
+    (min-digits->filter-fn min-digits)
     (fn [_tag] true)))
+
+(defn image->filter-fn [image]
+  (let [str-filter-fn (if-let [filter-values (get (safely-slurp-edn (filter-file-path) {}) image)]
+                        (vector->filter-fn filter-values)
+                        (fn [_tag] true))
+        min-digits-fn (min-digits-filter-fn image)]
+    (fn [tag] (and (str-filter-fn tag)
+                   (min-digits-fn tag)))))
 
 (defn ^:private update-index! [k f & args]
   (let [m (safely-slurp-edn (index-file-path) {})
@@ -360,19 +388,25 @@ Usage: docker-update-tag [COMMAND] [OPTION...]
 
 Available commands:
 
-  docker-update-tag                ; Add or update an image tag
-  docker-update-tag update IMAGE   ; Add or update IMAGE, e.g. `eclipse-temurin`
-  docker-update-tag help           ; Print subcommands
-  docker-update-tag scan           ; Scan a folder for Dockerfiles
-  docker-update-tag list           ; List available tags for an image
+  docker-update-tag                ; Add or update an image tag.
+  docker-update-tag update IMAGE   ; Add or update IMAGE, e.g. `eclipse-temurin`.
+  docker-update-tag help           ; Print subcommands.
+  docker-update-tag scan           ; Scan a folder for Dockerfiles.
+  docker-update-tag list           ; List available tags for an image.
 
   docker-update-tag filter IMAGE CONTAINS-PATTERN-1 CONTAINS-PATTERN-2
                                    ; Add a permanent filter for IMAGE, e.g.
                                    ; `docker-update-tag filter eclipse-temurin jammy`
                                    ; or
                                    ; `docker-update-tag filter clojure tools-deps jammy`
-                                   ; zero patterns removes the filter
-  docker-update-tag list-filter    ; list all filters
+                                   ; Zero patterns removes the filter.
+  docker-update-tag list-filter    ; List all filters.
+
+  docker-update-tag min-digits IMAGE MIN_DIGITS
+                                   ; Specify minimum number of digits the tags for image must contain.
+                                   ; Can be used to avoid showing fleeting tags.
+                                   ; If MIN_DIGITS is not given the filter is removed.
+  docker-update-tag min-digits     ; Show min digits filters.
 ")))
 
 (defn add-filter [{:keys [args] {:keys [image]} :opts}]
@@ -385,6 +419,13 @@ Available commands:
 (comment
   ((vector->filter-fn ["jdk" "jammy"]) "janei-jdk-jammy"))
 
+(defn add-or-show-min-digits [{{:keys [image min-digits]} :opts}]
+  (if image
+    (do
+      (update-min-digits-filter! image min-digits)
+      (println "Image:" image "min-digits:" min-digits))
+    (pprint (safely-slurp-edn (min-digits-file-path) {}))))
+
 (def dispatch-table
   [
    ;{:cmds ["clear-index"]    :fn quickadd-clear-index}
@@ -394,6 +435,7 @@ Available commands:
    {:cmds ["update"] :fn update-tag :args->opts [:image :tag]}
    {:cmds ["list"] :fn list-tags :args->opts [:image]}
    {:cmds ["filter"] :fn add-filter :args->opts [:image]}
+   {:cmds ["min-digits"] :fn add-or-show-min-digits :args->opts [:image :min-digits]}
    {:cmds ["list-filter"] :fn list-filters :args->opts [:image]}
    ;{:cmds ["blacklist-lib"]  :fn quickadd-blacklist-lib :args->opts [:lib]}
    ;{:cmds ["blacklist-list"] :fn quickadd-blacklist-list}
