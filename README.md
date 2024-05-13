@@ -6,7 +6,8 @@ Add or update your Dockerfile tags _with style_.
 
 ## Usage
 
-`docker-update-tag scan DIR` - Scan `DIR` for docker image names.
+`docker-update-tag scan DIR` - Scan `DIR` for docker image names. The current directory's Dockerfile is always included
+and thus `docker-update-tag scan .` is not needed.
 
 `docker-update-tag` - Add or update a docker image tag.
 

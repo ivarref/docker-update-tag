@@ -392,6 +392,8 @@ Available commands:
   docker-update-tag update IMAGE   ; Add or update IMAGE, e.g. `eclipse-temurin`.
   docker-update-tag help           ; Print subcommands.
   docker-update-tag scan           ; Scan a folder for Dockerfiles.
+                                   ; The current directory's Dockerfile is always included.
+                                   ; Thus `docker-update-tag scan .` is not needed.
   docker-update-tag list           ; List available tags for an image.
 
   docker-update-tag filter IMAGE CONTAINS-PATTERN-1 CONTAINS-PATTERN-2
