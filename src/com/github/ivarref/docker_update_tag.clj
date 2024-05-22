@@ -293,12 +293,28 @@ Allowed OPTS:
 
 (defn list-tags [{:keys [opts]}]
   (let [image (or (:image opts)
-                  (select-image-name))]
-    (doseq [tag (->> (fetch-tags image)
-                     (sort-tags)
-                     (filter (image->filter-fn image))
-                     (vec))]
-      (println (str image ":" tag)))))
+                  (select-image-name))
+        all-tags (->> (fetch-tags image)
+                      (sort-tags))
+        filtered-tags (->> all-tags
+                           (filter (image->filter-fn image))
+                           (vec))]
+    (cond
+      (empty? all-tags)
+      (println "No tags found for" image)
+
+      (empty? filtered-tags)
+      (do
+        (println "No tags found for" image "after filtering!")
+        (println "Original tags:")
+        (doseq [tag all-tags]
+          (println (str image ":" tag)))
+        (println "No tags found for" image "after filtering, original tags were shown."))
+
+      :else
+      (doseq [tag filtered-tags]
+        (println (str image ":" tag))))))
+
 
 (defn update-dockerfile-line [line image tag]
   (if (str/starts-with? line "FROM ")
